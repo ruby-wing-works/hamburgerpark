@@ -466,6 +466,25 @@ function spawnInitial() {
     
     const maxCount = Math.min(count, 35); // 上限35個
 
+    // ステージ1は中央付近に2個確定で隣接配置するが、位置や角度にランダム性を持たせる
+    if (currentStage === 1) {
+        let forcedType = types[Math.floor(Math.random() * types.length)];
+        
+        // 中心から少しだけランダムにずらす
+        const cx = canvas.width / 2 + (Math.random() * 60 - 30);
+        const cy = canvas.height * 0.4 + (Math.random() * 60 - 30);
+        
+        // ランダムな角度で2つを配置
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 30; // 半径分（30px）ずらして確実に密着・マッチ判定に入るようにする
+        
+        ingredients.push(new Ingredient(forcedType, cx + Math.cos(angle) * dist, cy + Math.sin(angle) * dist, false, true));
+        ingredients.push(new Ingredient(forcedType, cx - Math.cos(angle) * dist, cy - Math.sin(angle) * dist, false, true));
+        
+        spawnShooter();
+        return;
+    }
+
     // 初期ステージ（具材が少ないとき）は中央付近に固めて配置する
     const isEarlyStage = currentStage <= 3;
     const minY = isEarlyStage ? canvas.height * 0.25 : canvas.height * 0.1;
@@ -474,8 +493,39 @@ function spawnInitial() {
     const minX = centerMargin;
     const maxX = canvas.width - centerMargin;
 
-    // 初期ステージ（具材が少ないとき）は同じ色のペアを保証する
-    let forcedType = types[Math.floor(Math.random() * types.length)];
+    // 初期配置時に3マッチが最初から揃ってしまうのを防ぐチェック関数
+    function wouldFormMatch3(x, y, type) {
+        let matchCount = 1;
+        const visited = new Set();
+        const stack = [];
+        const dummyRadius = 40; // 具材の基本半径として仮定
+        
+        for (const ing of ingredients) {
+            if (ing.type === type) {
+                const dist = Math.hypot(x - ing.x, y - ing.y);
+                if (dist <= dummyRadius + ing.radius + 8) {
+                    stack.push(ing);
+                    visited.add(ing);
+                    matchCount++;
+                }
+            }
+        }
+        
+        while (stack.length > 0) {
+            const current = stack.pop();
+            for (const neighbor of ingredients) {
+                if (neighbor.type === type && !visited.has(neighbor)) {
+                    const dist = Math.hypot(current.x - neighbor.x, current.y - neighbor.y);
+                    if (dist <= current.radius + neighbor.radius + 8) {
+                        visited.add(neighbor);
+                        stack.push(neighbor);
+                        matchCount++;
+                    }
+                }
+            }
+        }
+        return matchCount >= 3;
+    }
 
     let placed = 0;
     let globalAttempts = 0;
@@ -512,9 +562,17 @@ function spawnInitial() {
 
         if (!valid) continue;
 
-        // 全ての具材を同じタイプにする（ステージ1の場合）
-        const type = (currentStage === 1) ? forcedType : types[Math.floor(Math.random() * types.length)];
-        ingredients.push(new Ingredient(type, x, y, false, true));
+        // 3マッチになってしまわない色を選ぶ
+        let availableTypes = [...types].sort(() => Math.random() - 0.5);
+        let selectedType = availableTypes[0];
+        for (let t of availableTypes) {
+            if (!wouldFormMatch3(x, y, t)) {
+                selectedType = t;
+                break;
+            }
+        }
+
+        ingredients.push(new Ingredient(selectedType, x, y, false, true));
         placed++;
     }
 
@@ -792,7 +850,7 @@ function gameLoop(now) {
         const line1 = "HAMBURGER";
         const line2 = "PARK";
         const fullText = line1 + line2;
-        ctx.font = 'bold 52px "Fredoka One", sans-serif'; // 文字サイズを拡大
+        ctx.font = 'bold 52px "Fredoka One", sans-serif'; // 文字サイズを調整
         
         const drawLine = (text, y, startIndex) => {
             const totalWidth = ctx.measureText(text).width;
@@ -938,15 +996,32 @@ requestAnimationFrame(gameLoop);
 
 function getPointerPos(e) {
     const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX || e.touches?.[0]?.clientX) - rect.left;
-    const y = (e.clientY || e.touches?.[0]?.clientY) - rect.top;
+    let clientX = e.clientX;
+    let clientY = e.clientY;
+    
+    // スマホのタッチイベント対応
+    if (e.touches && e.touches.length > 0) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+    }
+    
+    // CSS上のサイズとCanvas内部の解像度がずれた場合のための補正処理
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
+    
     return { x, y };
 }
 
-canvas.addEventListener('pointerdown', (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+const handleInputDown = (e) => {
+    // タッチイベント時のスクロールやダブルタップズームを防止
+    if (e.type === 'touchstart') {
+        e.preventDefault();
+    }
+    
+    const { x, y } = getPointerPos(e);
 
     if (gameState === 'title') {
         const btnW = 280;
@@ -1022,10 +1097,13 @@ canvas.addEventListener('pointerdown', (e) => {
         target.isDragging = true;
         aiming = { ingredient: target, startX: target.x, startY: target.y, currentX: x, currentY: y };
     }
-});
+};
+
+canvas.addEventListener('pointerdown', handleInputDown);
+canvas.addEventListener('touchstart', handleInputDown, { passive: false });
 
 // キャンバス外に出ても操作が途切れないよう、window にリスナーを追加
-window.addEventListener('pointermove', (e) => {
+const handleInputMove = (e) => {
     if (aiming) {
         // getPointerPosはcanvas基準の座標を取る。イベントがwindowから来ても
         // clientX/Yとcanvasのboundingrectの差分を取っていれば正常に計算できる
@@ -1033,9 +1111,11 @@ window.addEventListener('pointermove', (e) => {
         aiming.currentX = pos.x;
         aiming.currentY = pos.y;
     }
-});
+};
+window.addEventListener('pointermove', handleInputMove);
+window.addEventListener('touchmove', handleInputMove, { passive: false });
 
-window.addEventListener('pointerup', (e) => {
+const handleInputUp = (e) => {
     if (aiming) {
         // 引いた方向（current - start）を計算
         const dragDx = aiming.currentX - aiming.startX;
@@ -1082,7 +1162,9 @@ window.addEventListener('pointerup', (e) => {
         aiming.ingredient.isDragging = false;
         aiming = null;
     }
-});
+};
+window.addEventListener('pointerup', handleInputUp);
+window.addEventListener('touchend', handleInputUp);
 
 // （旧：handleCollisions は、各玉の update(dt) 内でのCCD+即時判定に統合したため削除されました。
 // ※ 物理演算と衝突めり込みチェックが切り離されていたのが事故の原因だったため、
