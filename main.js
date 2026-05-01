@@ -580,15 +580,15 @@ function spawnInitial() {
 }
 
 function spawnShooter() {
-    // 盤面上の存在する色をスキャンしてリスト化する
-    const activeTypes = new Set();
+    // 盤面上の存在する色をスキャンしてリスト化する（多い具材ほど配列内に多く入り、選ばれやすくなる）
+    const activeTypes = [];
     for (const ing of ingredients) {
         if (ing.isStatic && !ing.isShooter && !pendingRemoval.has(ing)) {
-            activeTypes.add(ing.type);
+            activeTypes.push(ing.type);
         }
     }
 
-    let types = Array.from(activeTypes);
+    let types = activeTypes;
     // もし盤面が空の場合などのエラー防止
     if (types.length === 0) {
         types = ['hamburger', 'potato', 'drink'];
