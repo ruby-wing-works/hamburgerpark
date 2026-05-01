@@ -10,10 +10,16 @@ class AudioManager {
         this.masterGain = this.ctx.createGain();
         this.masterGain.connect(this.ctx.destination);
         this.masterGain.gain.value = 0.5;
+        this.muted = false;
+    }
+
+    toggleMute() {
+        this.muted = !this.muted;
     }
 
     // 短いビープ音生成
     playTone(freq, type, duration, volume = 0.1) {
+        if (this.muted) return;
         if (this.ctx.state === 'suspended') this.ctx.resume();
         const osc = this.ctx.createOscillator();
         const g = this.ctx.createGain();
@@ -41,6 +47,7 @@ class AudioManager {
         this.playTone(1200, 'triangle', 0.3, 0.1); 
     }
     playStageClear() {
+        if (this.muted) return;
         const now = this.ctx.currentTime;
         [523.25, 659.25, 783.99, 1046.50].forEach((f, i) => {
             const osc = this.ctx.createOscillator();
@@ -684,7 +691,7 @@ function gameLoop(now) {
             ctx.fillStyle = '#ffcc00';
             ctx.font = 'bold 36px "Fredoka One", sans-serif';
             ctx.textAlign = 'right';
-            ctx.fillText(`${combo} COMBO!`, canvas.width - 20, 50);
+            ctx.fillText(`${combo} COMBO!`, canvas.width - 20, 100); // ミュートボタンと被らないよう下に移動
         }
 
         // ステージクリア（全消し）とゲームオーバー（弾切れ生成待ち）の厳格チェック
@@ -989,6 +996,38 @@ function gameLoop(now) {
         ctx.fillText('Next Stage', canvas.width / 2, nextY + 38);
     }
 
+    // ミュートボタンの描画
+    if (gameState === 'title') {
+        // タイトル画面用の目立つサウンド設定ボタン
+        const soundBtnW = 220;
+        const soundBtnH = 60;
+        const soundBtnX = canvas.width / 2 - soundBtnW / 2;
+        const soundBtnY = canvas.height * 0.65 + 100; // STARTボタンの下
+
+        ctx.fillStyle = audio.muted ? '#aa4444' : '#44aa44';
+        roundRect(ctx, soundBtnX, soundBtnY, soundBtnW, soundBtnH, 10);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 24px "Outfit", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(audio.muted ? '🔇 Sound OFF' : '🔊 Sound ON', canvas.width / 2, soundBtnY + 38);
+
+        // クリック判定用に保存
+        audio.titleBtnRect = { x: soundBtnX, y: soundBtnY, w: soundBtnW, h: soundBtnH };
+    } else {
+        // ゲーム中などは右上のコンパクトなボタン
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.beginPath();
+        ctx.arc(canvas.width - 40, 40, 24, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = audio.muted ? '#ff4444' : '#fff';
+        ctx.font = '24px sans-serif'; // 絵文字用フォント
+        ctx.textAlign = 'center';
+        ctx.fillText(audio.muted ? '🔇' : '🔊', canvas.width - 40, 48);
+        
+        audio.titleBtnRect = null;
+    }
+
     requestAnimationFrame(gameLoop);
 }
 requestAnimationFrame(gameLoop);
@@ -1022,6 +1061,28 @@ const handleInputDown = (e) => {
     }
     
     const { x, y } = getPointerPos(e);
+
+    // ミュートボタンの判定
+    let clickedMute = false;
+    if (gameState === 'title' && audio.titleBtnRect) {
+        const { x: bx, y: by, w: bw, h: bh } = audio.titleBtnRect;
+        if (x >= bx && x <= bx + bw && y >= by && y <= by + bh) {
+            clickedMute = true;
+        }
+    } else {
+        const muteDist = Math.hypot(x - (canvas.width - 40), y - 40);
+        if (muteDist <= 30) { // 少し広めに判定
+            clickedMute = true;
+        }
+    }
+
+    if (clickedMute) {
+        audio.toggleMute();
+        if (!audio.muted && audio.ctx.state === 'suspended') {
+            audio.ctx.resume();
+        }
+        return;
+    }
 
     if (gameState === 'title') {
         const btnW = 280;
