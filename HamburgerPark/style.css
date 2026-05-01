@@ -1,0 +1,29 @@
+/* style.css */
+@import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Outfit:wght@400;700&display=swap');
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100vh;
+  background: #3d2b1f; /* Dark wood-like background for the outer area */
+  font-family: 'Outfit', sans-serif;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  touch-action: none;
+}
+
+#gameCanvas {
+  background: #8b5e3c; /* Base wood color */
+  aspect-ratio: 9 / 16;
+  width: 100%;
+  height: 100%;
+  max-width: calc(100vh * 9 / 16);
+  max-height: 100vh;
+  display: block;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  cursor: crosshair;
+}
