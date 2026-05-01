@@ -1054,7 +1054,14 @@ function getPointerPos(e) {
     return { x, y };
 }
 
+let lastInputTime = 0;
+
 const handleInputDown = (e) => {
+    // タッチイベントとポインターイベントの重複発火（ダブルタップ判定）を防ぐ
+    const nowTime = Date.now();
+    if (nowTime - lastInputTime < 50) return;
+    lastInputTime = nowTime;
+
     // タッチイベント時のスクロールやダブルタップズームを防止
     if (e.type === 'touchstart') {
         e.preventDefault();
